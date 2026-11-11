@@ -18,7 +18,7 @@
     }
 
     main {
-      max-width: 900px;
+      max-width: 960px;
       margin: auto;
       padding: 28px;
       background: white;
@@ -29,6 +29,16 @@
     h1 {
       margin-top: 0;
       color: #146b83;
+    }
+
+    .version {
+      display: inline-block;
+      padding: 4px 10px;
+      border: 1px solid #146b83;
+      border-radius: 6px;
+      color: #146b83;
+      font-size: 14px;
+      font-weight: bold;
     }
 
     .description {
@@ -51,9 +61,16 @@
       font: inherit;
     }
 
-    input:focus, textarea:focus {
+    input:focus, textarea:focus, button:focus-visible {
       outline: 2px solid #146b83;
       outline-offset: 2px;
+    }
+
+    .field-error {
+      min-height: 18px;
+      margin: 4px 0 0;
+      font-size: 13px;
+      color: #b3261e;
     }
 
     button {
@@ -71,9 +88,56 @@
       background: #0e5063;
     }
 
+    button.secondary {
+      background: #526575;
+    }
+
+    button.secondary:hover {
+      background: #3f4f5c;
+    }
+
+    button.danger {
+      margin-top: 0;
+      padding: 7px 12px;
+      background: #b3261e;
+    }
+
+    button.danger:hover {
+      background: #8c1d18;
+    }
+
     #message {
       min-height: 24px;
+      font-weight: bold;
+    }
+
+    #message.ok {
       color: #146b83;
+    }
+
+    #message.error {
+      color: #b3261e;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .toolbar .grow {
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .toolbar button {
+      margin-top: 0;
+    }
+
+    .counts {
+      font-size: 14px;
+      color: #526575;
     }
 
     .table-container {
@@ -90,6 +154,7 @@
       padding: 12px;
       border: 1px solid #ccd7df;
       text-align: left;
+      vertical-align: top;
       overflow-wrap: anywhere;
       white-space: pre-wrap;
     }
@@ -122,6 +187,7 @@
 <body>
   <main>
     <h1>Electronic Health Record</h1>
+    <p><span class="version" id="versionLabel"></span></p>
 
     <p class="description">
       A simple EHR demonstration hosted on Microsoft Azure.
@@ -130,15 +196,292 @@
 
     <h2>Patient Entry Form</h2>
 
-    <form id="patientForm">
+    <form id="patientForm" novalidate>
       <label for="patientId">Patient ID</label>
-      <input
-        id="patientId"
-        placeholder="Example: P001"
-        maxlength="30"
-        required
-      >
+      <input id="patientId" placeholder="Example: P001" maxlength="30" autocomplete="off">
+      <p class="field-error" id="idError"></p>
 
       <label for="patientName">Patient Name</label>
-      <input
-        id="patientName"
+      <input id="patientName" placeholder="Example: Anne-Marie O'Connor" maxlength="100" autocomplete="off">
+      <p class="field-error" id="nameError"></p>
+
+      <label for="age">Age in years (whole number, 0 to 120)</label>
+      <input id="age" type="text" inputmode="numeric" autocomplete="off">
+      <p class="field-error" id="ageError"></p>
+
+      <label for="notes">Clinical Notes</label>
+      <textarea id="notes" rows="3" placeholder="Enter sample clinical notes" maxlength="500"></textarea>
+      <p class="field-error" id="notesError"></p>
+
+      <button type="submit">Add Patient Record</button>
+    </form>
+
+    <p id="message" role="status"></p>
+
+    <h2>Patient Records</h2>
+    <p>
+      Records are saved in this browser only (localStorage).
+      They are not shared with other devices.
+    </p>
+
+    <div class="toolbar">
+      <div class="grow">
+        <label for="search">Search by patient ID or name</label>
+        <input id="search" placeholder="Type to filter records" autocomplete="off">
+      </div>
+      <button type="button" class="secondary" id="clearSearch">Clear search</button>
+      <button type="button" class="secondary" id="loadSamples">Load 5 sample patients</button>
+    </div>
+
+    <p class="counts" id="counts" role="status"></p>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Patient ID</th>
+            <th>Name</th>
+            <th>Age</th>
+            <th>Clinical Notes</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="records"></tbody>
+      </table>
+    </div>
+
+    <footer>
+      Educational EHR demonstration | Microsoft Azure
+    </footer>
+  </main>
+
+  <script>
+    const APP_VERSION = "EHR Version 2";   // change this for Assignment 6
+    const STORAGE_KEY = "ehrRecords_v1";
+
+    document.getElementById("versionLabel").textContent = APP_VERSION;
+
+    const form = document.getElementById("patientForm");
+    const tbody = document.getElementById("records");
+    const message = document.getElementById("message");
+    const searchBox = document.getElementById("search");
+    const counts = document.getElementById("counts");
+
+    // Each record: { uid, id, name, age, notes }
+    let patients = loadPatients();
+
+    /* ---------- storage ---------- */
+    function loadPatients() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function savePatients() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(patients));
+        return true;
+      } catch (e) {
+        showMessage("Could not save to browser storage. Records will be lost on refresh.", true);
+        return false;
+      }
+    }
+
+    /* ---------- helpers ---------- */
+    function newUid() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    function normalizeId(raw) {
+      return raw.trim().toUpperCase();   // "p001" and "P001" become the same ID
+    }
+
+    function showMessage(text, isError) {
+      message.textContent = text;
+      message.className = isError ? "error" : "ok";
+    }
+
+    function setError(fieldId, text) {
+      document.getElementById(fieldId).textContent = text;
+    }
+
+    function clearErrors() {
+      ["idError", "nameError", "ageError", "notesError"].forEach(function (id) {
+        setError(id, "");
+      });
+    }
+
+    /* ---------- validation ---------- */
+    // Letters (any language) separated by single spaces, hyphens or apostrophes.
+    const NAME_RE = /^\p{L}+(?:[ '’-]\p{L}+)*$/u;
+    const ID_RE = /^[A-Z0-9-]{2,30}$/;   // checked after normalising, so no inner spaces
+
+    function validate(rawId, rawName, rawAge, rawNotes) {
+      const errors = {};
+      const id = normalizeId(rawId);
+      const name = rawName.trim().replace(/\s+/g, " ");
+      const ageText = rawAge.trim();
+      const notes = rawNotes.trim();
+
+      if (!id) {
+        errors.idError = "Patient ID is required.";
+      } else if (!ID_RE.test(id)) {
+        errors.idError = "Use 2-30 letters, digits or hyphens, with no spaces (example: P001).";
+      } else if (patients.some(function (p) { return p.id === id; })) {
+        errors.idError = "Patient ID " + id + " already exists (IDs are not case-sensitive).";
+      }
+
+      if (!name) {
+        errors.nameError = "Patient name is required.";
+      } else if (name.length < 2) {
+        errors.nameError = "Name must be at least 2 characters.";
+      } else if (!NAME_RE.test(name)) {
+        errors.nameError = "Use letters, spaces, hyphens or apostrophes only.";
+      }
+
+      if (!ageText) {
+        errors.ageError = "Age is required.";
+      } else if (!/^\d+$/.test(ageText)) {
+        errors.ageError = "Age must be a whole number (no decimals or minus sign).";
+      } else if (Number(ageText) > 120) {
+        errors.ageError = "Age must be between 0 and 120.";
+      }
+
+      if (!notes) {
+        errors.notesError = "Clinical notes are required (spaces alone are not accepted).";
+      } else if (notes.length > 500) {
+        errors.notesError = "Notes must be 500 characters or fewer.";
+      }
+
+      return { errors: errors, clean: { id: id, name: name, age: Number(ageText), notes: notes } };
+    }
+
+    /* ---------- rendering ---------- */
+    function render() {
+      const q = searchBox.value.trim().toLowerCase();
+      const matches = patients.filter(function (p) {
+        return !q || p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q);
+      });
+
+      tbody.replaceChildren();
+
+      if (matches.length === 0) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 5;
+        cell.textContent = patients.length === 0 ? "No records yet." : "No records match your search.";
+        row.appendChild(cell);
+        tbody.appendChild(row);
+      }
+
+      matches.forEach(function (p) {
+        const row = document.createElement("tr");
+
+        [p.id, p.name, String(p.age), p.notes].forEach(function (value) {
+          const cell = document.createElement("td");
+          cell.textContent = value;   // plain text, never interpreted as HTML
+          row.appendChild(cell);
+        });
+
+        const actionCell = document.createElement("td");
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "danger";
+        del.textContent = "Delete";
+        del.addEventListener("click", function () {
+          deletePatient(p.uid);   // delete by unique ID, not row position
+        });
+        actionCell.appendChild(del);
+        row.appendChild(actionCell);
+
+        tbody.appendChild(row);
+      });
+
+      counts.textContent = "Showing " + matches.length + " of " + patients.length + " total records.";
+    }
+
+    /* ---------- actions ---------- */
+    function deletePatient(uid) {
+      const target = patients.find(function (p) { return p.uid === uid; });
+      if (!target) return;
+
+      if (!confirm("Delete record " + target.id + " (" + target.name + ")?")) return;
+
+      patients = patients.filter(function (p) { return p.uid !== uid; });
+      savePatients();
+      render();
+      showMessage("Deleted record " + target.id + ".", false);
+    }
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      clearErrors();
+
+      const result = validate(
+        document.getElementById("patientId").value,
+        document.getElementById("patientName").value,
+        document.getElementById("age").value,
+        document.getElementById("notes").value
+      );
+
+      if (Object.keys(result.errors).length > 0) {
+        Object.keys(result.errors).forEach(function (field) {
+          setError(field, result.errors[field]);
+        });
+        showMessage("Record not added. Please fix the highlighted fields.", true);
+        return;   // existing records stay untouched
+      }
+
+      patients.push({
+        uid: newUid(),
+        id: result.clean.id,
+        name: result.clean.name,
+        age: result.clean.age,
+        notes: result.clean.notes
+      });
+
+      savePatients();
+      render();
+      showMessage("Patient record " + result.clean.id + " added successfully.", false);
+
+      form.reset();
+      document.getElementById("patientId").focus();
+    });
+
+    searchBox.addEventListener("input", render);
+
+    document.getElementById("clearSearch").addEventListener("click", function () {
+      searchBox.value = "";
+      render();
+    });
+
+    document.getElementById("loadSamples").addEventListener("click", function () {
+      const samples = [
+        ["P001", "Anne-Marie Demo", 34, "Fictional: routine check-up."],
+        ["P002", "John O'Connor", 58, "Fictional: blood pressure review."],
+        ["P003", "Demo Patient", 7, "Fictional: vaccination follow-up."],
+        ["P004", "Demo Patient", 72, "Fictional: same name, different ID."],
+        ["P005", "Maria Demo", 45, "Fictional: annual screening."]
+      ];
+
+      let added = 0;
+      samples.forEach(function (s) {
+        if (!patients.some(function (p) { return p.id === s[0]; })) {
+          patients.push({ uid: newUid(), id: s[0], name: s[1], age: s[2], notes: s[3] });
+          added++;
+        }
+      });
+
+      savePatients();
+      render();
+      showMessage(added + " sample record(s) added.", false);
+    });
+
+    render();
+  </script>
+</body>
+</html>
