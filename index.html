@@ -18,7 +18,7 @@
     }
 
     main {
-      max-width: 960px;
+      max-width: 980px;
       margin: auto;
       padding: 28px;
       background: white;
@@ -27,8 +27,12 @@
     }
 
     h1 {
-      margin-top: 0;
+      margin: 0 0 8px;
       color: #146b83;
+    }
+
+    h2 {
+      margin: 28px 0 8px;
     }
 
     .version {
@@ -46,6 +50,15 @@
       color: #526575;
     }
 
+    .notice {
+      margin: 16px 0;
+      padding: 10px 14px;
+      border-left: 4px solid #146b83;
+      background: #e7f2f6;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
     label {
       display: block;
       margin-top: 16px;
@@ -61,6 +74,11 @@
       font: inherit;
     }
 
+    input[aria-invalid="true"], textarea[aria-invalid="true"] {
+      border-color: #b3261e;
+      background: #fff6f5;
+    }
+
     input:focus, textarea:focus, button:focus-visible {
       outline: 2px solid #146b83;
       outline-offset: 2px;
@@ -71,6 +89,13 @@
       margin: 4px 0 0;
       font-size: 13px;
       color: #b3261e;
+    }
+
+    .hint {
+      margin: 4px 0 0;
+      font-size: 13px;
+      color: #526575;
+      text-align: right;
     }
 
     button {
@@ -136,8 +161,19 @@
     }
 
     .counts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 14px 0 0;
+    }
+
+    .count-pill {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #e7f2f6;
       font-size: 14px;
-      color: #526575;
+      font-weight: bold;
+      color: #146b83;
     }
 
     .table-container {
@@ -161,6 +197,41 @@
 
     th {
       background: #e7f2f6;
+    }
+
+    mark {
+      padding: 0 2px;
+      border-radius: 3px;
+      background: #ffe08a;
+      color: inherit;
+    }
+
+    dialog {
+      max-width: 420px;
+      padding: 24px;
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 8px 30px #00000040;
+      color: #203447;
+    }
+
+    dialog::backdrop {
+      background: #00000066;
+    }
+
+    dialog p {
+      margin: 0 0 8px;
+      line-height: 1.5;
+    }
+
+    .dialog-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .dialog-actions button {
+      margin-top: 8px;
     }
 
     footer {
@@ -194,23 +265,29 @@
       Use fictional patient information only.
     </p>
 
+    <div class="notice">
+      Fictional data only. Records are saved in this browser (localStorage)
+      and are not shared with other devices.
+    </div>
+
     <h2>Patient Entry Form</h2>
 
     <form id="patientForm" novalidate>
       <label for="patientId">Patient ID</label>
-      <input id="patientId" placeholder="Example: P001" maxlength="30" autocomplete="off">
+      <input id="patientId" placeholder="Example: P001" maxlength="30" autocomplete="off" aria-describedby="idError">
       <p class="field-error" id="idError"></p>
 
       <label for="patientName">Patient Name</label>
-      <input id="patientName" placeholder="Example: Anne-Marie O'Connor" maxlength="100" autocomplete="off">
+      <input id="patientName" placeholder="Example: Anne-Marie O'Connor" maxlength="100" autocomplete="off" aria-describedby="nameError">
       <p class="field-error" id="nameError"></p>
 
       <label for="age">Age in years (whole number, 0 to 120)</label>
-      <input id="age" type="text" inputmode="numeric" autocomplete="off">
+      <input id="age" type="text" inputmode="numeric" autocomplete="off" aria-describedby="ageError">
       <p class="field-error" id="ageError"></p>
 
       <label for="notes">Clinical Notes</label>
-      <textarea id="notes" rows="3" placeholder="Enter sample clinical notes" maxlength="500"></textarea>
+      <textarea id="notes" rows="3" placeholder="Enter sample clinical notes" maxlength="500" aria-describedby="notesError"></textarea>
+      <p class="hint" id="notesCounter">0 / 500</p>
       <p class="field-error" id="notesError"></p>
 
       <button type="submit">Add Patient Record</button>
@@ -219,21 +296,22 @@
     <p id="message" role="status"></p>
 
     <h2>Patient Records</h2>
-    <p>
-      Records are saved in this browser only (localStorage).
-      They are not shared with other devices.
-    </p>
 
     <div class="toolbar">
       <div class="grow">
         <label for="search">Search by patient ID or name</label>
-        <input id="search" placeholder="Type to filter records" autocomplete="off">
+        <input id="search" placeholder="Type to filter records (Esc to clear)" autocomplete="off">
       </div>
       <button type="button" class="secondary" id="clearSearch">Clear search</button>
       <button type="button" class="secondary" id="loadSamples">Load 5 sample patients</button>
+      <button type="button" class="secondary" id="exportCsv">Export CSV</button>
+      <button type="button" class="danger" id="deleteAll">Delete all records</button>
     </div>
 
-    <p class="counts" id="counts" role="status"></p>
+    <p class="counts" role="status">
+      <span class="count-pill" id="totalCount"></span>
+      <span class="count-pill" id="matchCount"></span>
+    </p>
 
     <div class="table-container">
       <table>
@@ -255,6 +333,16 @@
     </footer>
   </main>
 
+  <dialog id="confirmDialog">
+    <form method="dialog">
+      <p id="confirmText"></p>
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" class="secondary" id="confirmCancel">Cancel</button>
+        <button type="submit" value="ok" class="danger" id="confirmOk">Delete</button>
+      </div>
+    </form>
+  </dialog>
+
   <script>
     const APP_VERSION = "EHR Version 2";   // change this for Assignment 6
     const STORAGE_KEY = "ehrRecords_v1";
@@ -265,7 +353,20 @@
     const tbody = document.getElementById("records");
     const message = document.getElementById("message");
     const searchBox = document.getElementById("search");
-    const counts = document.getElementById("counts");
+    const totalCount = document.getElementById("totalCount");
+    const matchCount = document.getElementById("matchCount");
+    const notesCounter = document.getElementById("notesCounter");
+    const dialog = document.getElementById("confirmDialog");
+    const confirmText = document.getElementById("confirmText");
+    const confirmOk = document.getElementById("confirmOk");
+
+    // field name -> { input element id, error element id }
+    const FIELDS = {
+      id:    { input: "patientId",   error: "idError" },
+      name:  { input: "patientName", error: "nameError" },
+      age:   { input: "age",         error: "ageError" },
+      notes: { input: "notes",       error: "notesError" }
+    };
 
     // Each record: { uid, id, name, age, notes }
     let patients = loadPatients();
@@ -275,7 +376,28 @@
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         const data = raw ? JSON.parse(raw) : [];
-        return Array.isArray(data) ? data : [];
+        if (!Array.isArray(data)) return [];
+
+        const seen = new Set();
+        const clean = [];
+
+        data.forEach(function (item) {
+          if (!item || typeof item !== "object") return;
+
+          const id = String(item.id || "").trim().toUpperCase();
+          if (!id || seen.has(id)) return;   // skip blank or duplicate IDs
+          seen.add(id);
+
+          clean.push({
+            uid: item.uid ? String(item.uid) : newUid(),
+            id: id,
+            name: String(item.name || ""),
+            age: Number(item.age) || 0,
+            notes: String(item.notes || "")
+          });
+        });
+
+        return clean;
       } catch (e) {
         return [];
       }
@@ -305,13 +427,40 @@
       message.className = isError ? "error" : "ok";
     }
 
-    function setError(fieldId, text) {
-      document.getElementById(fieldId).textContent = text;
+    function setFieldError(field, text) {
+      const input = document.getElementById(FIELDS[field].input);
+      document.getElementById(FIELDS[field].error).textContent = text;
+      if (text) {
+        input.setAttribute("aria-invalid", "true");
+      } else {
+        input.removeAttribute("aria-invalid");
+      }
     }
 
     function clearErrors() {
-      ["idError", "nameError", "ageError", "notesError"].forEach(function (id) {
-        setError(id, "");
+      Object.keys(FIELDS).forEach(function (field) {
+        setFieldError(field, "");
+      });
+    }
+
+    function updateNotesCounter() {
+      notesCounter.textContent = document.getElementById("notes").value.length + " / 500";
+    }
+
+    // Ask for confirmation with a dialog (falls back to confirm() if unsupported)
+    function askConfirm(text, okLabel) {
+      if (typeof dialog.showModal !== "function") {
+        return Promise.resolve(window.confirm(text));
+      }
+      return new Promise(function (resolve) {
+        confirmText.textContent = text;
+        confirmOk.textContent = okLabel;
+        dialog.returnValue = "cancel";
+        dialog.addEventListener("close", function onClose() {
+          dialog.removeEventListener("close", onClose);
+          resolve(dialog.returnValue === "ok");
+        });
+        dialog.showModal();
       });
     }
 
@@ -329,33 +478,33 @@
       const notes = rawNotes.trim();
 
       if (!id) {
-        errors.idError = "Patient ID is required.";
+        errors.id = "Patient ID is required.";
       } else if (!ID_RE.test(id)) {
-        errors.idError = "Use 2-30 letters, digits or hyphens, with no spaces (example: P001).";
+        errors.id = "Use 2-30 letters, digits or hyphens, with no spaces (example: P001).";
       } else if (patients.some(function (p) { return p.id === id; })) {
-        errors.idError = "Patient ID " + id + " already exists (IDs are not case-sensitive).";
+        errors.id = "Patient ID " + id + " already exists (IDs are not case-sensitive).";
       }
 
       if (!name) {
-        errors.nameError = "Patient name is required.";
+        errors.name = "Patient name is required.";
       } else if (name.length < 2) {
-        errors.nameError = "Name must be at least 2 characters.";
+        errors.name = "Name must be at least 2 characters.";
       } else if (!NAME_RE.test(name)) {
-        errors.nameError = "Use letters, spaces, hyphens or apostrophes only.";
+        errors.name = "Use letters, spaces, hyphens or apostrophes only.";
       }
 
       if (!ageText) {
-        errors.ageError = "Age is required.";
+        errors.age = "Age is required.";
       } else if (!/^\d+$/.test(ageText)) {
-        errors.ageError = "Age must be a whole number (no decimals or minus sign).";
+        errors.age = "Age must be a whole number (no decimals or minus sign).";
       } else if (Number(ageText) > 120) {
-        errors.ageError = "Age must be between 0 and 120.";
+        errors.age = "Age must be between 0 and 120.";
       }
 
       if (!notes) {
-        errors.notesError = "Clinical notes are required (spaces alone are not accepted).";
+        errors.notes = "Clinical notes are required (spaces alone are not accepted).";
       } else if (notes.length > 500) {
-        errors.notesError = "Notes must be 500 characters or fewer.";
+        errors.notes = "Notes must be 500 characters or fewer.";
       }
 
       return {
@@ -364,11 +513,55 @@
       };
     }
 
+    function currentFormValues() {
+      return [
+        document.getElementById("patientId").value,
+        document.getElementById("patientName").value,
+        document.getElementById("age").value,
+        document.getElementById("notes").value
+      ];
+    }
+
     /* ---------- rendering ---------- */
+    // Writes text into a cell; wraps search matches in <mark> using DOM nodes only.
+    function fillCell(cell, text, query) {
+      if (!query) {
+        cell.textContent = text;
+        return;
+      }
+
+      const lower = text.toLowerCase();
+      if (lower.length !== text.length) {   // rare case-mapping change: skip highlighting
+        cell.textContent = text;
+        return;
+      }
+
+      let pos = 0;
+      let index = lower.indexOf(query, pos);
+      if (index === -1) {
+        cell.textContent = text;
+        return;
+      }
+
+      while (index !== -1) {
+        if (index > pos) {
+          cell.appendChild(document.createTextNode(text.slice(pos, index)));
+        }
+        const mark = document.createElement("mark");
+        mark.textContent = text.slice(index, index + query.length);
+        cell.appendChild(mark);
+        pos = index + query.length;
+        index = lower.indexOf(query, pos);
+      }
+      if (pos < text.length) {
+        cell.appendChild(document.createTextNode(text.slice(pos)));
+      }
+    }
+
     function render() {
-      const q = searchBox.value.trim().toLowerCase();
+      const query = searchBox.value.trim().toLowerCase();
       const matches = patients.filter(function (p) {
-        return !q || p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q);
+        return !query || p.id.toLowerCase().includes(query) || p.name.toLowerCase().includes(query);
       });
 
       tbody.replaceChildren();
@@ -377,7 +570,9 @@
         const row = document.createElement("tr");
         const cell = document.createElement("td");
         cell.colSpan = 5;
-        cell.textContent = patients.length === 0 ? "No records yet." : "No records match your search.";
+        cell.textContent = patients.length === 0
+          ? "No records yet. Add a patient above or load the sample patients."
+          : "No records match your search.";
         row.appendChild(cell);
         tbody.appendChild(row);
       }
@@ -385,17 +580,28 @@
       matches.forEach(function (p) {
         const row = document.createElement("tr");
 
-        [p.id, p.name, String(p.age), p.notes].forEach(function (value) {
-          const cell = document.createElement("td");
-          cell.textContent = value;   // plain text, never interpreted as HTML
-          row.appendChild(cell);
-        });
+        const idCell = document.createElement("td");
+        fillCell(idCell, p.id, query);
+        row.appendChild(idCell);
+
+        const nameCell = document.createElement("td");
+        fillCell(nameCell, p.name, query);
+        row.appendChild(nameCell);
+
+        const ageCell = document.createElement("td");
+        ageCell.textContent = String(p.age);
+        row.appendChild(ageCell);
+
+        const notesCell = document.createElement("td");
+        notesCell.textContent = p.notes;   // plain text, never interpreted as HTML
+        row.appendChild(notesCell);
 
         const actionCell = document.createElement("td");
         const del = document.createElement("button");
         del.type = "button";
         del.className = "danger";
         del.textContent = "Delete";
+        del.setAttribute("aria-label", "Delete record " + p.id);
         del.addEventListener("click", function () {
           deletePatient(p.uid);   // delete by unique ID, not row position
         });
@@ -405,15 +611,20 @@
         tbody.appendChild(row);
       });
 
-      counts.textContent = "Showing " + matches.length + " of " + patients.length + " total records.";
+      totalCount.textContent = "Total records: " + patients.length;
+      matchCount.textContent = "Matching search: " + matches.length;
     }
 
     /* ---------- actions ---------- */
-    function deletePatient(uid) {
+    async function deletePatient(uid) {
       const target = patients.find(function (p) { return p.uid === uid; });
       if (!target) return;
 
-      if (!confirm("Delete record " + target.id + " (" + target.name + ")?")) return;
+      const ok = await askConfirm(
+        "Delete record " + target.id + " (" + target.name + ")? This cannot be undone.",
+        "Delete"
+      );
+      if (!ok) return;
 
       patients = patients.filter(function (p) { return p.uid !== uid; });
       savePatients();
@@ -421,22 +632,68 @@
       showMessage("Deleted record " + target.id + ".", false);
     }
 
+    async function deleteAllPatients() {
+      if (patients.length === 0) {
+        showMessage("There are no records to delete.", true);
+        return;
+      }
+      const ok = await askConfirm(
+        "Delete all " + patients.length + " records? This cannot be undone.",
+        "Delete all"
+      );
+      if (!ok) return;
+
+      patients = [];
+      savePatients();
+      render();
+      showMessage("All records deleted.", false);
+    }
+
+    function csvCell(value) {
+      let s = String(value);
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;   // prevent spreadsheet formula injection
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+
+    function exportCsv() {
+      if (patients.length === 0) {
+        showMessage("There are no records to export.", true);
+        return;
+      }
+
+      const lines = [["Patient ID", "Name", "Age", "Clinical Notes"].map(csvCell).join(",")];
+      patients.forEach(function (p) {
+        lines.push([p.id, p.name, p.age, p.notes].map(csvCell).join(","));
+      });
+
+      const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "ehr-records.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+
+      showMessage("Exported " + patients.length + " record(s) to ehr-records.csv.", false);
+    }
+
+    /* ---------- events ---------- */
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       clearErrors();
 
-      const result = validate(
-        document.getElementById("patientId").value,
-        document.getElementById("patientName").value,
-        document.getElementById("age").value,
-        document.getElementById("notes").value
-      );
+      const values = currentFormValues();
+      const result = validate(values[0], values[1], values[2], values[3]);
+      const fieldNames = Object.keys(result.errors);
 
-      if (Object.keys(result.errors).length > 0) {
-        Object.keys(result.errors).forEach(function (field) {
-          setError(field, result.errors[field]);
+      if (fieldNames.length > 0) {
+        fieldNames.forEach(function (field) {
+          setFieldError(field, result.errors[field]);
         });
         showMessage("Record not added. Please fix the highlighted fields.", true);
+        document.getElementById(FIELDS[fieldNames[0]].input).focus();
         return;   // existing records stay untouched
       }
 
@@ -453,14 +710,45 @@
       showMessage("Patient record " + result.clean.id + " added successfully.", false);
 
       form.reset();
+      updateNotesCounter();
       document.getElementById("patientId").focus();
     });
 
+    // Show a field's error when the user leaves it (only if something was typed)
+    Object.keys(FIELDS).forEach(function (field) {
+      const input = document.getElementById(FIELDS[field].input);
+
+      input.addEventListener("blur", function () {
+        if (input.value.trim() === "") {
+          setFieldError(field, "");
+          return;
+        }
+        const values = currentFormValues();
+        const result = validate(values[0], values[1], values[2], values[3]);
+        setFieldError(field, result.errors[field] || "");
+      });
+
+      input.addEventListener("input", function () {
+        if (input.getAttribute("aria-invalid") === "true") {
+          setFieldError(field, "");
+        }
+      });
+    });
+
+    document.getElementById("notes").addEventListener("input", updateNotesCounter);
+
     searchBox.addEventListener("input", render);
+    searchBox.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        searchBox.value = "";
+        render();
+      }
+    });
 
     document.getElementById("clearSearch").addEventListener("click", function () {
       searchBox.value = "";
       render();
+      searchBox.focus();
     });
 
     document.getElementById("loadSamples").addEventListener("click", function () {
@@ -482,10 +770,25 @@
 
       savePatients();
       render();
-      showMessage(added + " sample record(s) added.", false);
+      showMessage(
+        added > 0 ? added + " sample record(s) added." : "Sample patients are already in the list.",
+        added === 0
+      );
+    });
+
+    document.getElementById("exportCsv").addEventListener("click", exportCsv);
+    document.getElementById("deleteAll").addEventListener("click", deleteAllPatients);
+
+    // Keep the table in sync if another tab of this browser changes the data
+    window.addEventListener("storage", function (event) {
+      if (event.key === STORAGE_KEY) {
+        patients = loadPatients();
+        render();
+      }
     });
 
     // Draw saved records when the page loads
+    updateNotesCounter();
     render();
   </script>
 </body>
