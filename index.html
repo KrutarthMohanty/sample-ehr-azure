@@ -220,9 +220,9 @@
 
     <h2>Patient Records</h2>
     <p>
-  Records are saved in this browser (localStorage) and survive a refresh.
-  They are not shared with other devices.
-</p>
+      Records are saved in this browser only (localStorage).
+      They are not shared with other devices.
+    </p>
 
     <div class="toolbar">
       <div class="grow">
@@ -256,167 +256,237 @@
   </main>
 
   <script>
-  const STORAGE_KEY = "ehrRecords";
+    const APP_VERSION = "EHR Version 2";   // change this for Assignment 6
+    const STORAGE_KEY = "ehrRecords_v1";
 
-  const form = document.getElementById("patientForm");
-  const records = document.getElementById("records");
-  const message = document.getElementById("message");
+    document.getElementById("versionLabel").textContent = APP_VERSION;
 
-  const idInput = document.getElementById("patientId");
-  const nameInput = document.getElementById("patientName");
-  const ageInput = document.getElementById("age");
-  const notesInput = document.getElementById("notes");
+    const form = document.getElementById("patientForm");
+    const tbody = document.getElementById("records");
+    const message = document.getElementById("message");
+    const searchBox = document.getElementById("search");
+    const counts = document.getElementById("counts");
 
-  // Letters (any language) separated by single spaces, hyphens or apostrophes
-  const NAME_PATTERN = /^\p{L}+(?:[ '’-]\p{L}+)*$/u;
-  // Letters, digits and hyphens only, no spaces
-  const ID_PATTERN = /^[A-Z0-9-]{2,30}$/;
+    // Each record: { uid, id, name, age, notes }
+    let patients = loadPatients();
 
-  // Each record: { uid, id, name, age, notes }
-  let patients = loadPatients();
+    /* ---------- storage ---------- */
+    function loadPatients() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      } catch (e) {
+        return [];
+      }
+    }
 
-  /* ---------- storage ---------- */
+    function savePatients() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(patients));
+        return true;
+      } catch (e) {
+        showMessage("Could not save to browser storage. Records will be lost on refresh.", true);
+        return false;
+      }
+    }
 
-  function loadPatients() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const data = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(data)) return [];
+    /* ---------- helpers ---------- */
+    function newUid() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
 
-      // Convert records saved by the older script (arrays) into objects
-      return data.map(function (item) {
-        if (Array.isArray(item)) {
-          return {
-            uid: createUid(),
-            id: String(item[0]).trim().toUpperCase(),
-            name: String(item[1]),
-            age: Number(item[2]),
-            notes: String(item[3])
-          };
-        }
-        return item;
+    function normalizeId(raw) {
+      return raw.trim().toUpperCase();   // "p001" and "P001" become the same ID
+    }
+
+    function showMessage(text, isError) {
+      message.textContent = text;
+      message.className = isError ? "error" : "ok";
+    }
+
+    function setError(fieldId, text) {
+      document.getElementById(fieldId).textContent = text;
+    }
+
+    function clearErrors() {
+      ["idError", "nameError", "ageError", "notesError"].forEach(function (id) {
+        setError(id, "");
       });
-    } catch (error) {
-      return [];
-    }
-  }
-
-  function savePatients() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(patients));
-      return true;
-    } catch (error) {
-      showMessage("Could not save records in this browser.", true);
-      return false;
-    }
-  }
-
-  /* ---------- helpers ---------- */
-
-  function createUid() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  }
-
-  function normalizeId(value) {
-    return value.trim().toUpperCase();   // "p001" and "P001" become the same ID
-  }
-
-  function showMessage(text, isError) {
-    message.textContent = text;
-    message.style.color = isError ? "#b3261e" : "#146b83";
-  }
-
-  /* ---------- validation ---------- */
-
-  // Returns an error message, or an empty string when the input is valid
-  function validate(id, name, ageText, notes) {
-    if (!id) return "Patient ID is required.";
-    if (!ID_PATTERN.test(id)) {
-      return "Patient ID must be 2-30 letters, digits or hyphens, with no spaces (example: P001).";
-    }
-    if (patients.some(function (p) { return p.id === id; })) {
-      return "Patient ID " + id + " already exists. IDs are not case-sensitive. Please use a different ID.";
     }
 
-    if (!name) return "Patient name is required.";
-    if (name.length < 2) return "Patient name must be at least 2 characters.";
-    if (!NAME_PATTERN.test(name)) {
-      return "Patient name may contain only letters, spaces, hyphens and apostrophes.";
+    /* ---------- validation ---------- */
+    // Letters (any language) separated by single spaces, hyphens or apostrophes.
+    const NAME_RE = /^\p{L}+(?:[ '’-]\p{L}+)*$/u;
+    // After normalising: 2-30 letters, digits or hyphens, no spaces.
+    const ID_RE = /^[A-Z0-9-]{2,30}$/;
+
+    function validate(rawId, rawName, rawAge, rawNotes) {
+      const errors = {};
+      const id = normalizeId(rawId);
+      const name = rawName.trim().replace(/\s+/g, " ");
+      const ageText = rawAge.trim();
+      const notes = rawNotes.trim();
+
+      if (!id) {
+        errors.idError = "Patient ID is required.";
+      } else if (!ID_RE.test(id)) {
+        errors.idError = "Use 2-30 letters, digits or hyphens, with no spaces (example: P001).";
+      } else if (patients.some(function (p) { return p.id === id; })) {
+        errors.idError = "Patient ID " + id + " already exists (IDs are not case-sensitive).";
+      }
+
+      if (!name) {
+        errors.nameError = "Patient name is required.";
+      } else if (name.length < 2) {
+        errors.nameError = "Name must be at least 2 characters.";
+      } else if (!NAME_RE.test(name)) {
+        errors.nameError = "Use letters, spaces, hyphens or apostrophes only.";
+      }
+
+      if (!ageText) {
+        errors.ageError = "Age is required.";
+      } else if (!/^\d+$/.test(ageText)) {
+        errors.ageError = "Age must be a whole number (no decimals or minus sign).";
+      } else if (Number(ageText) > 120) {
+        errors.ageError = "Age must be between 0 and 120.";
+      }
+
+      if (!notes) {
+        errors.notesError = "Clinical notes are required (spaces alone are not accepted).";
+      } else if (notes.length > 500) {
+        errors.notesError = "Notes must be 500 characters or fewer.";
+      }
+
+      return {
+        errors: errors,
+        clean: { id: id, name: name, age: Number(ageText), notes: notes }
+      };
     }
 
-    if (!ageText) return "Age is required.";
-    if (!/^\d+$/.test(ageText)) {
-      return "Age must be a whole number with no decimals or minus sign.";
-    }
-    if (Number(ageText) > 120) return "Age must be between 0 and 120.";
+    /* ---------- rendering ---------- */
+    function render() {
+      const q = searchBox.value.trim().toLowerCase();
+      const matches = patients.filter(function (p) {
+        return !q || p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q);
+      });
 
-    if (!notes) return "Clinical notes are required. Spaces alone are not accepted.";
-    if (notes.length > 500) return "Clinical notes must be 500 characters or fewer.";
+      tbody.replaceChildren();
 
-    return "";
-  }
+      if (matches.length === 0) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 5;
+        cell.textContent = patients.length === 0 ? "No records yet." : "No records match your search.";
+        row.appendChild(cell);
+        tbody.appendChild(row);
+      }
 
-  /* ---------- rendering ---------- */
+      matches.forEach(function (p) {
+        const row = document.createElement("tr");
 
-  function addRow(patient) {
-    const row = document.createElement("tr");
+        [p.id, p.name, String(p.age), p.notes].forEach(function (value) {
+          const cell = document.createElement("td");
+          cell.textContent = value;   // plain text, never interpreted as HTML
+          row.appendChild(cell);
+        });
 
-    [patient.id, patient.name, String(patient.age), patient.notes].forEach(function (value) {
-      const cell = document.createElement("td");
-      cell.textContent = value;   // plain text, never interpreted as HTML
-      row.appendChild(cell);
-    });
+        const actionCell = document.createElement("td");
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "danger";
+        del.textContent = "Delete";
+        del.addEventListener("click", function () {
+          deletePatient(p.uid);   // delete by unique ID, not row position
+        });
+        actionCell.appendChild(del);
+        row.appendChild(actionCell);
 
-    records.appendChild(row);
-  }
+        tbody.appendChild(row);
+      });
 
-  function render() {
-    records.replaceChildren();
-    patients.forEach(addRow);
-  }
-
-  /* ---------- events ---------- */
-
-  form.addEventListener("submit", function (event) {
-    event.preventDefault();
-
-    const id = normalizeId(idInput.value);
-    const name = nameInput.value.trim().replace(/\s+/g, " ");
-    const ageText = ageInput.value.trim();
-    const notes = notesInput.value.trim();
-
-    const error = validate(id, name, ageText, notes);
-    if (error) {
-      showMessage(error, true);   // existing records stay untouched
-      return;
+      counts.textContent = "Showing " + matches.length + " of " + patients.length + " total records.";
     }
 
-    patients.push({
-      uid: createUid(),
-      id: id,
-      name: name,
-      age: Number(ageText),
-      notes: notes
-    });
+    /* ---------- actions ---------- */
+    function deletePatient(uid) {
+      const target = patients.find(function (p) { return p.uid === uid; });
+      if (!target) return;
 
-    savePatients();
-    render();
+      if (!confirm("Delete record " + target.id + " (" + target.name + ")?")) return;
 
-    showMessage("Patient record " + id + " added successfully.", false);
-    form.reset();
-    idInput.focus();
-  });
-
-  // Keep the table in sync if another tab of this browser changes the data
-  window.addEventListener("storage", function (event) {
-    if (event.key === STORAGE_KEY) {
-      patients = loadPatients();
+      patients = patients.filter(function (p) { return p.uid !== uid; });
+      savePatients();
       render();
+      showMessage("Deleted record " + target.id + ".", false);
     }
-  });
 
-  // Draw saved records when the page loads
-  render();
-</script>
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      clearErrors();
+
+      const result = validate(
+        document.getElementById("patientId").value,
+        document.getElementById("patientName").value,
+        document.getElementById("age").value,
+        document.getElementById("notes").value
+      );
+
+      if (Object.keys(result.errors).length > 0) {
+        Object.keys(result.errors).forEach(function (field) {
+          setError(field, result.errors[field]);
+        });
+        showMessage("Record not added. Please fix the highlighted fields.", true);
+        return;   // existing records stay untouched
+      }
+
+      patients.push({
+        uid: newUid(),
+        id: result.clean.id,
+        name: result.clean.name,
+        age: result.clean.age,
+        notes: result.clean.notes
+      });
+
+      savePatients();
+      render();
+      showMessage("Patient record " + result.clean.id + " added successfully.", false);
+
+      form.reset();
+      document.getElementById("patientId").focus();
+    });
+
+    searchBox.addEventListener("input", render);
+
+    document.getElementById("clearSearch").addEventListener("click", function () {
+      searchBox.value = "";
+      render();
+    });
+
+    document.getElementById("loadSamples").addEventListener("click", function () {
+      const samples = [
+        ["P001", "Anne-Marie Demo", 34, "Fictional: routine check-up."],
+        ["P002", "John O'Connor", 58, "Fictional: blood pressure review."],
+        ["P003", "Demo Patient", 7, "Fictional: vaccination follow-up."],
+        ["P004", "Demo Patient", 72, "Fictional: same name, different ID."],
+        ["P005", "Maria Demo", 45, "Fictional: annual screening."]
+      ];
+
+      let added = 0;
+      samples.forEach(function (s) {
+        if (!patients.some(function (p) { return p.id === s[0]; })) {
+          patients.push({ uid: newUid(), id: s[0], name: s[1], age: s[2], notes: s[3] });
+          added++;
+        }
+      });
+
+      savePatients();
+      render();
+      showMessage(added + " sample record(s) added.", false);
+    });
+
+    // Draw saved records when the page loads
+    render();
+  </script>
 </body>
 </html>
